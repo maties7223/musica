@@ -182,7 +182,7 @@ enum LibraryManager {
         return result
     }
 
-    // MARK: - Descarga desde YouTube (Cobalt API)
+    // MARK: - Descarga desde YouTube (Cobalt API Corregido)
 
     @MainActor
     static func downloadFromYouTube(url youtubeURL: String, into context: ModelContext) async -> Bool {
@@ -195,7 +195,7 @@ enum LibraryManager {
         
         let body: [String: Any] = [
             "url": youtubeURL,
-            "downloadMode": "audio"
+            "audioFormat": "m4a"
         ]
         
         guard let httpBody = try? JSONSerialization.data(withJSONObject: body) else { return false }
