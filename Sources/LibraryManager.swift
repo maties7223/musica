@@ -17,7 +17,6 @@ enum LibraryManager {
         var artwork: Data?
     }
 
-    /// Quita caracteres no válidos para nombres de carpeta/archivo.
     static func clean(_ text: String) -> String {
         let bad = CharacterSet(charactersIn: "/\\:?*\"<>|")
         let result = text.components(separatedBy: bad).joined(separator: "-")
@@ -48,7 +47,6 @@ enum LibraryManager {
         return meta
     }
 
-    /// Copia los archivos a Documents/Music/Artista/Álbum/ y los registra en la base de datos.
     @MainActor
     static func importFiles(_ urls: [URL], into context: ModelContext) async -> (added: Int, skipped: Int) {
         var added = 0, skipped = 0
@@ -84,15 +82,34 @@ enum LibraryManager {
         return (added, skipped)
     }
 
+    /// Borra canciones: archivo, carpetas vacías, listas y base de datos.
     @MainActor
-    static func delete(_ song: Song, in context: ModelContext) {
-        PlayerManager.shared.remove(id: song.id)
-        try? FileManager.default.removeItem(at: song.url)
+    static func delete(_ songs: [Song], in context: ModelContext) {
+        let ids = Set(songs.map(\.id))
+        let urls = songs.map(\.url)
+
+        for id in ids { PlayerManager.shared.remove(id: id) }
+
+        for url in urls {
+            try? FileManager.default.removeItem(at: url)
+            removeEmptyFolders(from: url.deletingLastPathComponent())
+        }
 
         if let playlists = try? context.fetch(FetchDescriptor<Playlist>()) {
-            for p in playlists { p.songIDs.removeAll { $0 == song.id } }
+            for p in playlists { p.songIDs.removeAll { ids.contains($0) } }
         }
-        context.delete(song)
+        for s in songs { context.delete(s) }
         try? context.save()
+    }
+
+    private static func removeEmptyFolders(from folder: URL) {
+        let root = musicDirectory.path
+        var dir = folder
+        while dir.path.hasPrefix(root), dir.path != root {
+            let contents = (try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? []
+            guard contents.allSatisfy({ $0 == ".DS_Store" }) else { break }
+            try? FileManager.default.removeItem(at: dir)
+            dir = dir.deletingLastPathComponent()
+        }
     }
 }

@@ -4,11 +4,12 @@ struct ContentView: View {
     var body: some View {
         TabView {
             LibraryView()
-                .tabItem { Label("Biblioteca", systemImage: "music.note.list") }
+                .tabItem { Label("Canciones", systemImage: "music.note") }
             ArtistsView()
                 .tabItem { Label("Artistas", systemImage: "music.mic") }
             PlaylistsView()
-                .tabItem { Label("Listas", systemImage: "square.stack") }
+                .tabItem { Label("Listas", systemImage: "music.note.list") }
         }
+        .tint(Theme.accent)
     }
 }

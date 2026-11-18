@@ -12,6 +12,10 @@ struct LibraryView: View {
     @State private var importing = false
     @State private var message: String?
 
+    @State private var editing = false
+    @State private var selected = Set<UUID>()
+    @State private var confirmDelete = false
+
     private var filtered: [Song] {
         guard !search.isEmpty else { return songs }
         return songs.filter {
@@ -34,32 +38,23 @@ struct LibraryView: View {
                             .buttonStyle(.borderedProminent)
                     }
                 } else {
-                    List {
-                        ForEach(Array(filtered.enumerated()), id: \.element.id) { i, song in
-                            Button { player.play(filtered, startAt: i) } label: {
-                                SongRow(song: song)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                        .onDelete { offsets in
-                            let items = offsets.map { filtered[$0] }
-                            for s in items { LibraryManager.delete(s, in: context) }
-                        }
-                    }
-                    .listStyle(.plain)
+                    list
                 }
             }
-            .navigationTitle("Biblioteca")
+            .navigationTitle("Canciones")
             .searchable(text: $search, prompt: "Buscar")
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button { showImporter = true } label: { Image(systemName: "plus") }
-                }
                 if !songs.isEmpty {
                     ToolbarItem(placement: .topBarLeading) {
-                        Button { player.play(songs.shuffled()) } label: {
-                            Image(systemName: "shuffle")
+                        Button(editing ? "Hecho" : "Seleccionar") {
+                            editing.toggle()
+                            selected = []
                         }
+                    }
+                }
+                if !editing {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button { showImporter = true } label: { Image(systemName: "plus") }
                     }
                 }
             }
@@ -71,7 +66,8 @@ struct LibraryView: View {
                     importing = true
                     let r = await LibraryManager.importFiles(urls, into: context)
                     importing = false
-                    message = "Añadidas: \(r.added)" + (r.skipped > 0 ? " · Omitidas (repetidas o con error): \(r.skipped)" : "")
+                    message = "Añadidas: \(r.added)" +
+                        (r.skipped > 0 ? " · Omitidas (repetidas o con error): \(r.skipped)" : "")
                 }
             }
             .overlay {
@@ -85,7 +81,72 @@ struct LibraryView: View {
                                                       set: { if !$0 { message = nil } })) {
                 Button("OK", role: .cancel) {}
             } message: { Text(message ?? "") }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if editing { deleteBar }
+            }
+            .confirmationDialog("¿Eliminar \(selected.count) canciones?",
+                                isPresented: $confirmDelete, titleVisibility: .visible) {
+                Button("Eliminar", role: .destructive) {
+                    let items = songs.filter { selected.contains($0.id) }
+                    LibraryManager.delete(items, in: context)
+                    selected = []
+                    editing = false
+                }
+            } message: {
+                Text("Se borrarán de la app y de tus listas.")
+            }
             .miniPlayerInset()
         }
+    }
+
+    private var list: some View {
+        List {
+            if search.isEmpty && !editing {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("\(songs.count) canciones")
+                        .font(.subheadline).foregroundStyle(.secondary)
+                    PlayShuffleButtons(
+                        onPlay: { player.play(filtered) },
+                        onShuffle: { player.play(filtered.shuffled()) })
+                }
+                .listRowSeparator(.hidden)
+            }
+            ForEach(Array(filtered.enumerated()), id: \.element.id) { i, song in
+                Button {
+                    if editing {
+                        if selected.contains(song.id) { selected.remove(song.id) }
+                        else { selected.insert(song.id) }
+                    } else {
+                        player.play(filtered, startAt: i)
+                    }
+                } label: {
+                    SongRow(song: song, selecting: editing, selected: selected.contains(song.id))
+                }
+                .buttonStyle(.plain)
+            }
+            .onDelete(perform: deleteOffsets)
+        }
+        .listStyle(.plain)
+    }
+
+    private var deleteBar: some View {
+        HStack {
+            Button(selected.count == filtered.count ? "Deseleccionar todo" : "Seleccionar todo") {
+                if selected.count == filtered.count { selected = [] }
+                else { selected = Set(filtered.map(\.id)) }
+            }
+            Spacer()
+            Button(role: .destructive) { confirmDelete = true } label: {
+                Label("Eliminar (\(selected.count))", systemImage: "trash")
+            }
+            .disabled(selected.isEmpty)
+        }
+        .padding()
+        .background(.bar)
+    }
+
+    private func deleteOffsets(_ offsets: IndexSet) {
+        let items = offsets.map { filtered[$0] }
+        LibraryManager.delete(items, in: context)
     }
 }
