@@ -77,8 +77,8 @@ struct ArtistDetailView: View {
                     ArtworkView(id: first.id, data: first.displayArtwork, size: 140, corner: 70)
                         .shadow(color: .black.opacity(0.25), radius: 12, y: 6)
                     PlayShuffleButtons(
-                        onPlay: { player.play(ordered) },
-                        onShuffle: { player.play(ordered.shuffled()) })
+                        onPlay: { player.playInOrder(ordered) },
+                        onShuffle: { player.playShuffled(ordered) })
                 }
                 .frame(maxWidth: .infinity)
                 .listRowSeparator(.hidden)
@@ -90,6 +90,7 @@ struct ArtistDetailView: View {
                             SongRow(song: song)
                         }
                         .buttonStyle(.plain)
+                        .favoriteSwipe(song)
                     }
                     .onDelete { offsets in
                         LibraryManager.delete(offsets.map { album.songs[$0] }, in: context)

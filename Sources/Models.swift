@@ -13,6 +13,8 @@ final class Song {
     @Attribute(.externalStorage) var artworkData: Data?
     /// Imagen elegida por el usuario (tiene prioridad sobre la carátula del archivo).
     @Attribute(.externalStorage) var customArtworkData: Data? = nil
+    /// Fecha en que se marcó como favorita (nil = no es favorita).
+    var favoritedAt: Date? = nil
     var dateAdded: Date
 
     init(title: String, artist: String, album: String, duration: Double,
@@ -30,6 +32,10 @@ final class Song {
     var url: URL {
         LibraryManager.musicDirectory.appending(path: relativePath)
     }
+
+    var isFavorite: Bool { favoritedAt != nil }
+
+    func toggleFavorite() { favoritedAt = isFavorite ? nil : Date() }
 
     /// Imagen que se muestra: la del usuario si existe, si no la del archivo.
     var displayArtwork: Data? { customArtworkData ?? artworkData }

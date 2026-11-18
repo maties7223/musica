@@ -13,43 +13,65 @@ struct PlaylistsView: View {
         return playlist.songIDs.compactMap { map[$0] }
     }
 
+    private var favoriteCount: Int { allSongs.filter { $0.isFavorite }.count }
+
     var body: some View {
         NavigationStack {
-            Group {
+            List {
+                NavigationLink {
+                    FavoritesView()
+                } label: {
+                    HStack(spacing: 14) {
+                        ZStack {
+                            Theme.gradient
+                            Image(systemName: "heart.fill")
+                                .font(.system(size: 22, weight: .semibold))
+                                .foregroundStyle(.white)
+                        }
+                        .frame(width: 58, height: 58)
+                        .clipShape(RoundedRectangle(cornerRadius: 58 * 0.14, style: .continuous))
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Favoritos").font(.headline)
+                            Text("\(favoriteCount) canciones")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
+
                 if playlists.isEmpty {
-                    ContentUnavailableView {
-                        Label("Sin listas", systemImage: "music.note.list")
-                    } description: {
-                        Text("Crea tu primera lista de reproducción.")
-                    } actions: {
+                    VStack(spacing: 10) {
+                        Text("Aún no tienes listas de reproducción.")
+                            .foregroundStyle(.secondary)
                         Button("Nueva lista") { showNew = true }
                             .buttonStyle(.borderedProminent)
                     }
-                } else {
-                    List {
-                        ForEach(playlists) { p in
-                            NavigationLink {
-                                PlaylistDetailView(playlist: p)
-                            } label: {
-                                let inList = songs(in: p)
-                                HStack(spacing: 14) {
-                                    PlaylistCover(playlist: p, songs: inList, size: 58)
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(p.name).font(.headline).lineLimit(1)
-                                        Text("\(inList.count) canciones")
-                                            .font(.caption).foregroundStyle(.secondary)
-                                    }
-                                }
-                                .padding(.vertical, 2)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .listRowSeparator(.hidden)
+                }
+
+                ForEach(playlists) { p in
+                    NavigationLink {
+                        PlaylistDetailView(playlist: p)
+                    } label: {
+                        let inList = songs(in: p)
+                        HStack(spacing: 14) {
+                            PlaylistCover(playlist: p, songs: inList, size: 58)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(p.name).font(.headline).lineLimit(1)
+                                Text("\(inList.count) canciones")
+                                    .font(.caption).foregroundStyle(.secondary)
                             }
                         }
-                        .onDelete { offsets in
-                            for i in offsets { context.delete(playlists[i]) }
-                        }
+                        .padding(.vertical, 2)
                     }
-                    .listStyle(.plain)
+                }
+                .onDelete { offsets in
+                    for i in offsets { context.delete(playlists[i]) }
                 }
             }
+            .listStyle(.plain)
             .navigationTitle("Listas")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -101,8 +123,8 @@ struct PlaylistDetailView: View {
                     .fontWeight(.semibold)
                 } else {
                     PlayShuffleButtons(
-                        onPlay: { player.play(current) },
-                        onShuffle: { player.play(current.shuffled()) })
+                        onPlay: { player.playInOrder(current) },
+                        onShuffle: { player.playShuffled(current) })
                 }
             }
             .frame(maxWidth: .infinity)
@@ -117,6 +139,7 @@ struct PlaylistDetailView: View {
                     SongRow(song: song, onRemoveFromPlaylist: { remove(song) })
                 }
                 .buttonStyle(.plain)
+                .favoriteSwipe(song)
                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                     Button(role: .destructive) { remove(song) } label: {
                         Label("Quitar", systemImage: "minus.circle")

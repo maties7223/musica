@@ -229,6 +229,32 @@ struct PlayShuffleButtons: View {
     }
 }
 
+// MARK: - Favoritos
+
+enum FavoriteActions {
+    static func toggle(_ song: Song) {
+        song.toggleFavorite()
+        if song.isFavorite {
+            Toast.shared.show("Añadida a favoritos", icon: "heart.fill")
+        } else {
+            Toast.shared.show("Quitada de favoritos", icon: "heart.slash.fill")
+        }
+    }
+}
+
+extension View {
+    /// Deslizar hacia la derecha para marcar o desmarcar como favorita.
+    func favoriteSwipe(_ song: Song) -> some View {
+        swipeActions(edge: .leading, allowsFullSwipe: true) {
+            Button { FavoriteActions.toggle(song) } label: {
+                Label(song.isFavorite ? "Quitar favorito" : "Favorito",
+                      systemImage: song.isFavorite ? "heart.slash.fill" : "heart.fill")
+            }
+            .tint(Theme.accent)
+        }
+    }
+}
+
 // MARK: - Fila de canción
 
 struct SongRow: View {
@@ -280,6 +306,11 @@ struct SongRow: View {
                     .foregroundStyle(Theme.accent)
                     .symbolEffect(.variableColor.iterative, isActive: player.isPlaying)
             }
+            if song.isFavorite {
+                Image(systemName: "heart.fill")
+                    .font(.caption)
+                    .foregroundStyle(Theme.accent)
+            }
             Text(song.duration.mmss)
                 .font(.caption)
                 .monospacedDigit()
@@ -287,6 +318,23 @@ struct SongRow: View {
         }
         .contentShape(Rectangle())
         .contextMenu {
+            Button("Reproducir a continuación",
+                   systemImage: "text.line.first.and.arrowtriangle.forward") {
+                player.playNext(song)
+            }
+            Button("Añadir a la cola",
+                   systemImage: "text.line.last.and.arrowtriangle.forward") {
+                player.addToQueue(song)
+            }
+            if song.isFavorite {
+                Button("Quitar de favoritos", systemImage: "heart.slash") {
+                    FavoriteActions.toggle(song)
+                }
+            } else {
+                Button("Añadir a favoritos", systemImage: "heart") {
+                    FavoriteActions.toggle(song)
+                }
+            }
             Menu("Añadir a lista", systemImage: "text.badge.plus") {
                 if playlists.isEmpty { Text("Primero crea una lista") }
                 ForEach(playlists) { p in

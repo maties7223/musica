@@ -108,8 +108,8 @@ struct LibraryView: View {
                     Text("\(songs.count) canciones")
                         .font(.subheadline).foregroundStyle(.secondary)
                     PlayShuffleButtons(
-                        onPlay: { player.play(filtered) },
-                        onShuffle: { player.play(filtered.shuffled()) })
+                        onPlay: { player.playInOrder(filtered) },
+                        onShuffle: { player.playShuffled(filtered) })
                 }
                 .listRowSeparator(.hidden)
             }
@@ -125,6 +125,7 @@ struct LibraryView: View {
                     SongRow(song: song, selecting: editing, selected: selected.contains(song.id))
                 }
                 .buttonStyle(.plain)
+                .favoriteSwipe(song)
             }
             .onDelete(perform: deleteOffsets)
         }
