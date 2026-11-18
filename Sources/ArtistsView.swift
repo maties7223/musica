@@ -1,13 +1,21 @@
 import SwiftUI
 import SwiftData
 
+struct ArtistGroup: Identifiable {
+    let key: String
+    let name: String
+    let songs: [Song]
+    var id: String { key }
+}
+
 struct ArtistsView: View {
     @Query(sort: \Song.title) private var songs: [Song]
 
-    private var grouped: [(artist: String, songs: [Song])] {
-        Dictionary(grouping: songs, by: \.artist)
-            .map { ($0.key, $0.value) }
-            .sorted { $0.0.localizedCaseInsensitiveCompare($1.0) == .orderedAscending }
+    /// Agrupa por el primer artista (de la etiqueta o, si no hay, del título).
+    private var grouped: [ArtistGroup] {
+        Dictionary(grouping: songs, by: \.artistKey)
+            .map { ArtistGroup(key: $0.key, name: $0.value[0].mainArtist, songs: $0.value) }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
     var body: some View {
@@ -17,16 +25,16 @@ struct ArtistsView: View {
                     ContentUnavailableView("Sin artistas", systemImage: "music.mic",
                                            description: Text("Añade música desde la pestaña Canciones."))
                 } else {
-                    List(grouped, id: \.artist) { group in
+                    List(grouped) { group in
                         NavigationLink {
-                            ArtistDetailView(name: group.artist)
+                            ArtistDetailView(key: group.key, name: group.name)
                         } label: {
                             HStack(spacing: 14) {
                                 ArtworkView(id: group.songs[0].id,
-                                            data: group.songs.first(where: { $0.artworkData != nil })?.artworkData,
+                                            data: group.songs.first(where: { $0.displayArtwork != nil })?.displayArtwork,
                                             size: 58, corner: 29)
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text(group.artist).font(.headline).lineLimit(1)
+                                    Text(group.name).font(.headline).lineLimit(1)
                                     Text("\(group.songs.count) canciones")
                                         .font(.caption).foregroundStyle(.secondary)
                                 }
@@ -44,18 +52,13 @@ struct ArtistsView: View {
 }
 
 struct ArtistDetailView: View {
+    let key: String
     let name: String
-    @Query private var songs: [Song]
+    @Query(sort: \Song.title) private var allSongs: [Song]
     @Environment(\.modelContext) private var context
     @Environment(PlayerManager.self) private var player
 
-    init(name: String) {
-        self.name = name
-        _songs = Query(filter: #Predicate<Song> { $0.artist == name },
-                       sort: \Song.title)
-    }
-
-    private var albums: [(name: String, songs: [Song])] {
+    private func makeAlbums(_ songs: [Song]) -> [(name: String, songs: [Song])] {
         Dictionary(grouping: songs, by: \.album)
             .map { ($0.key, $0.value.sorted {
                 $0.relativePath.localizedStandardCompare($1.relativePath) == .orderedAscending
@@ -63,13 +66,15 @@ struct ArtistDetailView: View {
             .sorted { $0.0.localizedCaseInsensitiveCompare($1.0) == .orderedAscending }
     }
 
-    private var ordered: [Song] { albums.flatMap(\.songs) }
-
     var body: some View {
+        let mine = allSongs.filter { $0.artistKey == key }
+        let albums = makeAlbums(mine)
+        let ordered = albums.flatMap(\.songs)
+
         List {
-            if let first = songs.first(where: { $0.artworkData != nil }) ?? songs.first {
+            if let first = mine.first(where: { $0.displayArtwork != nil }) ?? mine.first {
                 VStack(spacing: 16) {
-                    ArtworkView(id: first.id, data: first.artworkData, size: 140, corner: 70)
+                    ArtworkView(id: first.id, data: first.displayArtwork, size: 140, corner: 70)
                         .shadow(color: .black.opacity(0.25), radius: 12, y: 6)
                     PlayShuffleButtons(
                         onPlay: { player.play(ordered) },

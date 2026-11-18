@@ -98,7 +98,7 @@ final class PlayerManager {
 
     private func loadCurrent(autoplay: Bool) {
         guard let track = currentTrack else { return }
-        player.replaceCurrentItem(with: AVPlayerItem(url: track.url))
+        player.replaceCurrentItem(with: AVPlayerItem(asset: LibraryManager.preciseAsset(track.url)))
         currentTime = 0
         duration = track.duration
         if autoplay {

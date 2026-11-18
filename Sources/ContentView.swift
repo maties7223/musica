@@ -9,7 +9,10 @@ struct ContentView: View {
                 .tabItem { Label("Artistas", systemImage: "music.mic") }
             PlaylistsView()
                 .tabItem { Label("Listas", systemImage: "music.note.list") }
+            SettingsView()
+                .tabItem { Label("Ajustes", systemImage: "gearshape") }
         }
         .tint(Theme.accent)
+        .modifier(ToastOverlay())
     }
 }

@@ -23,6 +23,11 @@ enum LibraryManager {
         return types
     }
 
+    /// Asset que mide la duración real (importante en MP3 sin cabecera de duración).
+    static func preciseAsset(_ url: URL) -> AVURLAsset {
+        AVURLAsset(url: url, options: [AVURLAssetPreferPreciseDurationAndTimingKey: true])
+    }
+
     struct Metadata {
         var title: String
         var artist = "Artista desconocido"
@@ -49,7 +54,7 @@ enum LibraryManager {
     static func readMetadata(from url: URL, fallbackName: String) async -> Metadata {
         var meta = Metadata(title: URL(fileURLWithPath: fallbackName)
             .deletingPathExtension().lastPathComponent)
-        let asset = AVURLAsset(url: url)
+        let asset = preciseAsset(url)
 
         if let d = try? await asset.load(.duration), d.seconds.isFinite {
             meta.duration = d.seconds

@@ -20,7 +20,7 @@ struct LibraryView: View {
         guard !search.isEmpty else { return songs }
         return songs.filter {
             $0.title.localizedCaseInsensitiveContains(search) ||
-            $0.artist.localizedCaseInsensitiveContains(search) ||
+            $0.displayArtist.localizedCaseInsensitiveContains(search) ||
             $0.album.localizedCaseInsensitiveContains(search)
         }
     }

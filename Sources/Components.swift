@@ -1,5 +1,8 @@
 import SwiftUI
 import SwiftData
+import PhotosUI
+import UniformTypeIdentifiers
+import Observation
 
 // MARK: - Caché de carátulas
 
@@ -7,12 +10,125 @@ enum ImageCache {
     static let cache = NSCache<NSString, UIImage>()
 
     static func image(id: UUID, data: Data?) -> UIImage? {
-        let key = id.uuidString as NSString
+        guard let data else { return nil }
+        // El tamaño forma parte de la clave para que se actualice al cambiar la imagen.
+        let key = "\(id.uuidString)-\(data.count)" as NSString
         if let cached = cache.object(forKey: key) { return cached }
-        guard let data, let img = UIImage(data: data) else { return nil }
+        guard let img = UIImage(data: data) else { return nil }
         let thumb = img.preparingThumbnail(of: CGSize(width: 600, height: 600)) ?? img
         cache.setObject(thumb, forKey: key)
         return thumb
+    }
+}
+
+// MARK: - Preparar imágenes elegidas por el usuario
+
+enum ImageTools {
+    /// Reduce la imagen a un máximo de 1000 px y la guarda como JPEG.
+    static func prepared(_ data: Data, maxSide: CGFloat = 1000) -> Data? {
+        guard let image = UIImage(data: data) else { return nil }
+        let longest = max(image.size.width, image.size.height)
+        guard longest > 0 else { return nil }
+        let scale = min(1, maxSide / longest)
+        let target = CGSize(width: (image.size.width * scale).rounded(),
+                            height: (image.size.height * scale).rounded())
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = 1
+        format.opaque = true
+        let resized = UIGraphicsImageRenderer(size: target, format: format).image { _ in
+            UIColor.white.setFill()
+            UIRectFill(CGRect(origin: .zero, size: target))
+            image.draw(in: CGRect(origin: .zero, size: target))
+        }
+        return resized.jpegData(compressionQuality: 0.85)
+    }
+}
+
+/// Permite elegir una imagen de Fotos o de Archivos.
+struct ImageChooser: ViewModifier {
+    @Binding var photos: Bool
+    @Binding var files: Bool
+    let onPick: (Data) -> Void
+
+    @State private var item: PhotosPickerItem?
+
+    func body(content: Content) -> some View {
+        content
+            .photosPicker(isPresented: $photos, selection: $item, matching: .images)
+            .onChange(of: item) { _, newItem in
+                guard let newItem else { return }
+                Task {
+                    if let data = try? await newItem.loadTransferable(type: Data.self),
+                       let prepared = ImageTools.prepared(data) {
+                        await MainActor.run { onPick(prepared) }
+                    }
+                    await MainActor.run { item = nil }
+                }
+            }
+            .background(
+                Color.clear.fileImporter(isPresented: $files,
+                                         allowedContentTypes: [.image]) { result in
+                    guard case .success(let url) = result else { return }
+                    let access = url.startAccessingSecurityScopedResource()
+                    defer { if access { url.stopAccessingSecurityScopedResource() } }
+                    if let data = try? Data(contentsOf: url),
+                       let prepared = ImageTools.prepared(data) {
+                        onPick(prepared)
+                    }
+                }
+            )
+    }
+}
+
+extension View {
+    func imageChooser(photos: Binding<Bool>, files: Binding<Bool>,
+                      onPick: @escaping (Data) -> Void) -> some View {
+        modifier(ImageChooser(photos: photos, files: files, onPick: onPick))
+    }
+}
+
+// MARK: - Aviso discreto (se quita solo)
+
+@Observable
+final class Toast {
+    static let shared = Toast()
+
+    private(set) var text: String?
+    private(set) var icon = "checkmark.circle.fill"
+    @ObservationIgnored private var task: Task<Void, Never>?
+
+    private init() {}
+
+    func show(_ message: String, icon: String = "checkmark.circle.fill") {
+        task?.cancel()
+        self.icon = icon
+        withAnimation(.spring(duration: 0.3)) { text = message }
+        task = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(1.8))
+            if Task.isCancelled { return }
+            await MainActor.run {
+                withAnimation(.easeOut(duration: 0.25)) { self?.text = nil }
+            }
+        }
+    }
+}
+
+struct ToastOverlay: ViewModifier {
+    func body(content: Content) -> some View {
+        content.overlay(alignment: .top) {
+            if let text = Toast.shared.text {
+                Label(text, systemImage: Toast.shared.icon)
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(1)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(.regularMaterial, in: Capsule())
+                    .shadow(color: .black.opacity(0.15), radius: 8, y: 3)
+                    .padding(.top, 8)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .allowsHitTesting(false)
+            }
+        }
     }
 }
 
@@ -54,24 +170,27 @@ struct ArtworkView: View {
     }
 }
 
-// MARK: - Portada de lista (mosaico)
+// MARK: - Portada de lista (imagen propia o mosaico)
 
 struct PlaylistCover: View {
+    let playlist: Playlist
     let songs: [Song]
     var size: CGFloat = 56
 
     var body: some View {
-        let arts = Array(songs.filter { $0.artworkData != nil }.prefix(4))
+        let arts = Array(songs.filter { $0.displayArtwork != nil }.prefix(4))
         ZStack {
             Theme.gradient
-            if arts.count >= 4 {
+            if let own = playlist.coverData {
+                ArtworkView(id: playlist.id, data: own, size: size, corner: 0)
+            } else if arts.count >= 4 {
                 let h = size / 2
                 VStack(spacing: 0) {
                     HStack(spacing: 0) { tile(arts[0], h); tile(arts[1], h) }
                     HStack(spacing: 0) { tile(arts[2], h); tile(arts[3], h) }
                 }
             } else if let first = arts.first {
-                ArtworkView(id: first.id, data: first.artworkData, size: size, corner: 0)
+                ArtworkView(id: first.id, data: first.displayArtwork, size: size, corner: 0)
             } else {
                 Image(systemName: "music.note.list")
                     .font(.system(size: size * 0.38, weight: .semibold))
@@ -83,7 +202,7 @@ struct PlaylistCover: View {
     }
 
     private func tile(_ s: Song, _ h: CGFloat) -> some View {
-        ArtworkView(id: s.id, data: s.artworkData, size: h, corner: 0)
+        ArtworkView(id: s.id, data: s.displayArtwork, size: h, corner: 0)
     }
 }
 
@@ -116,13 +235,26 @@ struct SongRow: View {
     let song: Song
     var selecting = false
     var selected = false
+    /// Si se indica, el menú contextual ofrece "Quitar de esta lista".
+    var onRemoveFromPlaylist: (() -> Void)? = nil
 
     @Environment(\.modelContext) private var context
     @Environment(PlayerManager.self) private var player
     @Query(sort: \Playlist.name) private var playlists: [Playlist]
     @State private var confirmDelete = false
+    @State private var showPhotos = false
+    @State private var showFiles = false
 
     private var isCurrent: Bool { player.currentTrack?.id == song.id }
+
+    private func add(to playlist: Playlist) {
+        if playlist.songIDs.contains(song.id) {
+            Toast.shared.show("Ya está en «\(playlist.name)»", icon: "info.circle.fill")
+        } else {
+            playlist.songIDs.append(song.id)
+            Toast.shared.show("Añadida a «\(playlist.name)»")
+        }
+    }
 
     var body: some View {
         HStack(spacing: 12) {
@@ -131,13 +263,13 @@ struct SongRow: View {
                     .font(.title3)
                     .foregroundStyle(selected ? Theme.accent : Color.secondary)
             }
-            ArtworkView(id: song.id, data: song.artworkData, size: 50)
+            ArtworkView(id: song.id, data: song.displayArtwork, size: 50)
             VStack(alignment: .leading, spacing: 2) {
                 Text(song.title)
                     .lineLimit(1)
                     .fontWeight(isCurrent ? .semibold : .regular)
                     .foregroundStyle(isCurrent ? Theme.accent : Color.primary)
-                Text(song.artist)
+                Text(song.displayArtist)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -158,14 +290,36 @@ struct SongRow: View {
             Menu("Añadir a lista", systemImage: "text.badge.plus") {
                 if playlists.isEmpty { Text("Primero crea una lista") }
                 ForEach(playlists) { p in
-                    Button(p.name) {
-                        if !p.songIDs.contains(song.id) { p.songIDs.append(song.id) }
+                    Button {
+                        add(to: p)
+                    } label: {
+                        if p.songIDs.contains(song.id) {
+                            Label(p.name, systemImage: "checkmark")
+                        } else {
+                            Text(p.name)
+                        }
+                    }
+                }
+            }
+            if let onRemoveFromPlaylist {
+                Button("Quitar de esta lista", systemImage: "minus.circle",
+                       action: onRemoveFromPlaylist)
+            }
+            Menu("Imagen", systemImage: "photo") {
+                Button("Elegir de Fotos", systemImage: "photo.on.rectangle") { showPhotos = true }
+                Button("Elegir de Archivos", systemImage: "folder") { showFiles = true }
+                if song.customArtworkData != nil {
+                    Button("Quitar imagen", systemImage: "trash", role: .destructive) {
+                        song.customArtworkData = nil
                     }
                 }
             }
             Button("Eliminar de la biblioteca", systemImage: "trash", role: .destructive) {
                 confirmDelete = true
             }
+        }
+        .imageChooser(photos: $showPhotos, files: $showFiles) { data in
+            song.customArtworkData = data
         }
         .confirmationDialog("¿Eliminar esta canción?", isPresented: $confirmDelete,
                             titleVisibility: .visible) {

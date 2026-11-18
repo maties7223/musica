@@ -7,7 +7,6 @@ struct PlaylistsView: View {
     @Query private var allSongs: [Song]
 
     @State private var showNew = false
-    @State private var newName = ""
 
     private func songs(in playlist: Playlist) -> [Song] {
         let map = Dictionary(uniqueKeysWithValues: allSongs.map { ($0.id, $0) })
@@ -23,7 +22,7 @@ struct PlaylistsView: View {
                     } description: {
                         Text("Crea tu primera lista de reproducción.")
                     } actions: {
-                        Button("Nueva lista") { newName = ""; showNew = true }
+                        Button("Nueva lista") { showNew = true }
                             .buttonStyle(.borderedProminent)
                     }
                 } else {
@@ -32,11 +31,12 @@ struct PlaylistsView: View {
                             NavigationLink {
                                 PlaylistDetailView(playlist: p)
                             } label: {
+                                let inList = songs(in: p)
                                 HStack(spacing: 14) {
-                                    PlaylistCover(songs: songs(in: p), size: 58)
+                                    PlaylistCover(playlist: p, songs: inList, size: 58)
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(p.name).font(.headline).lineLimit(1)
-                                        Text("\(songs(in: p).count) canciones")
+                                        Text("\(inList.count) canciones")
                                             .font(.caption).foregroundStyle(.secondary)
                                     }
                                 }
@@ -53,16 +53,11 @@ struct PlaylistsView: View {
             .navigationTitle("Listas")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button { newName = ""; showNew = true } label: { Image(systemName: "plus") }
+                    Button { showNew = true } label: { Image(systemName: "plus") }
                 }
             }
-            .alert("Nueva lista", isPresented: $showNew) {
-                TextField("Nombre", text: $newName)
-                Button("Crear") {
-                    let name = newName.trimmingCharacters(in: .whitespaces)
-                    if !name.isEmpty { context.insert(Playlist(name: name)) }
-                }
-                Button("Cancelar", role: .cancel) {}
+            .sheet(isPresented: $showNew) {
+                PlaylistPickerSheet(playlist: nil)
             }
             .miniPlayerInset()
         }
@@ -76,19 +71,35 @@ struct PlaylistDetailView: View {
 
     @State private var showRename = false
     @State private var newName = ""
+    @State private var showPicker = false
+    @State private var showPhotos = false
+    @State private var showFiles = false
 
     private var songs: [Song] {
         let map = Dictionary(uniqueKeysWithValues: allSongs.map { ($0.id, $0) })
         return playlist.songIDs.compactMap { map[$0] }
     }
 
+    private func remove(_ song: Song) {
+        playlist.songIDs.removeAll { $0 == song.id }
+        Toast.shared.show("Quitada de «\(playlist.name)»", icon: "minus.circle.fill")
+    }
+
     var body: some View {
         let current = songs
         List {
             VStack(spacing: 16) {
-                PlaylistCover(songs: current, size: 160)
+                PlaylistCover(playlist: playlist, songs: current, size: 160)
                     .shadow(color: .black.opacity(0.25), radius: 12, y: 6)
-                if !current.isEmpty {
+                if current.isEmpty {
+                    Button { showPicker = true } label: {
+                        Label("Añadir canciones", systemImage: "plus")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .fontWeight(.semibold)
+                } else {
                     PlayShuffleButtons(
                         onPlay: { player.play(current) },
                         onShuffle: { player.play(current.shuffled()) })
@@ -98,12 +109,19 @@ struct PlaylistDetailView: View {
             .listRowSeparator(.hidden)
 
             if current.isEmpty {
-                Text("Vacía. Mantén pulsada una canción en Canciones y elige “Añadir a lista”.")
+                Text("Esta lista está vacía.")
                     .foregroundStyle(.secondary)
             }
             ForEach(Array(current.enumerated()), id: \.element.id) { i, song in
-                Button { player.play(current, startAt: i) } label: { SongRow(song: song) }
-                    .buttonStyle(.plain)
+                Button { player.play(current, startAt: i) } label: {
+                    SongRow(song: song, onRemoveFromPlaylist: { remove(song) })
+                }
+                .buttonStyle(.plain)
+                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                    Button(role: .destructive) { remove(song) } label: {
+                        Label("Quitar", systemImage: "minus.circle")
+                    }
+                }
             }
             .onDelete { offsets in
                 let ids = offsets.map { current[$0].id }
@@ -121,12 +139,30 @@ struct PlaylistDetailView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) { EditButton() }
             ToolbarItem(placement: .topBarTrailing) {
+                Button { showPicker = true } label: { Image(systemName: "plus") }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     Button("Renombrar", systemImage: "pencil") {
                         newName = playlist.name; showRename = true
                     }
+                    Menu("Imagen de la lista", systemImage: "photo") {
+                        Button("Elegir de Fotos", systemImage: "photo.on.rectangle") { showPhotos = true }
+                        Button("Elegir de Archivos", systemImage: "folder") { showFiles = true }
+                        if playlist.coverData != nil {
+                            Button("Quitar imagen", systemImage: "trash", role: .destructive) {
+                                playlist.coverData = nil
+                            }
+                        }
+                    }
                 } label: { Image(systemName: "ellipsis.circle") }
             }
+        }
+        .imageChooser(photos: $showPhotos, files: $showFiles) { data in
+            playlist.coverData = data
+        }
+        .sheet(isPresented: $showPicker) {
+            PlaylistPickerSheet(playlist: playlist)
         }
         .alert("Renombrar lista", isPresented: $showRename) {
             TextField("Nombre", text: $newName)
