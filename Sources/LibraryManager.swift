@@ -182,50 +182,6 @@ enum LibraryManager {
         return result
     }
 
-    // MARK: - Descarga desde YouTube (Cobalt API)
-
-    @MainActor
-    static func downloadFromYouTube(url youtubeURL: String, into context: ModelContext) async -> Bool {
-        guard let apiURL = URL(string: "https://api.cobalt.tools/api/json") else { return false }
-        
-        var request = URLRequest(url: apiURL)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15", forHTTPHeaderField: "User-Agent")
-        request.setValue("https://cobalt.tools", forHTTPHeaderField: "Origin")
-        
-        let body: [String: Any] = [
-            "url": youtubeURL,
-            "audioFormat": "m4a"
-        ]
-        
-        guard let httpBody = try? JSONSerialization.data(withJSONObject: body) else { return false }
-        request.httpBody = httpBody
-        
-        do {
-            let (data, _) = try await URLSession.shared.data(for: request)
-            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { return false }
-            
-            let status = json["status"] as? String ?? ""
-            guard status == "stream" || status == "redirect" || status == "picker",
-                  let downloadString = json["url"] as? String,
-                  let downloadURL = URL(string: downloadString) else {
-                return false
-            }
-            
-            let (tempLocalURL, _) = try await URLSession.shared.download(from: downloadURL)
-            let result = await importFiles([tempLocalURL], into: context)
-            
-            try? FileManager.default.removeItem(at: tempLocalURL)
-            
-            return result.added > 0
-        } catch {
-            print("Error descargando de YouTube con Cobalt: \(error)")
-            return false
-        }
-    }
-
     // MARK: - Borrar
 
     @MainActor

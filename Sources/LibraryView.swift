@@ -9,6 +9,7 @@ struct LibraryView: View {
 
     @State private var search = ""
     @State private var showImporter = false
+    @State private var showLink = false
     @State private var importing = false
     @State private var message: String?
 
@@ -36,6 +37,8 @@ struct LibraryView: View {
                     } actions: {
                         Button("Añadir música") { showImporter = true }
                             .buttonStyle(.borderedProminent)
+                        Button("Añadir desde un enlace") { showLink = true }
+                            .buttonStyle(.bordered)
                     }
                 } else {
                     list
@@ -54,7 +57,12 @@ struct LibraryView: View {
                 }
                 if !editing {
                     ToolbarItem(placement: .topBarTrailing) {
-                        Button { showImporter = true } label: { Image(systemName: "plus") }
+                        Menu {
+                            Button("Desde archivos", systemImage: "folder") { showImporter = true }
+                            Button("Desde un enlace", systemImage: "link") { showLink = true }
+                        } label: {
+                            Image(systemName: "plus")
+                        }
                     }
                 }
             }
@@ -71,6 +79,9 @@ struct LibraryView: View {
                     if r.failed > 0 { parts.append("No se pudieron convertir: \(r.failed)") }
                     message = parts.joined(separator: " · ")
                 }
+            }
+            .sheet(isPresented: $showLink) {
+                AddFromLinkSheet()
             }
             .overlay {
                 if importing {
