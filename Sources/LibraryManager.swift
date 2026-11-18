@@ -182,7 +182,7 @@ enum LibraryManager {
         return result
     }
 
-    // MARK: - Descarga desde YouTube (Cobalt API Corregido)
+    // MARK: - Descarga desde YouTube (Cobalt API)
 
     @MainActor
     static func downloadFromYouTube(url youtubeURL: String, into context: ModelContext) async -> Bool {
@@ -192,6 +192,8 @@ enum LibraryManager {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15", forHTTPHeaderField: "User-Agent")
+        request.setValue("https://cobalt.tools", forHTTPHeaderField: "Origin")
         
         let body: [String: Any] = [
             "url": youtubeURL,
