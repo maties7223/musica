@@ -59,15 +59,17 @@ struct LibraryView: View {
                 }
             }
             .fileImporter(isPresented: $showImporter,
-                          allowedContentTypes: [.audio],
+                          allowedContentTypes: LibraryManager.importTypes,
                           allowsMultipleSelection: true) { result in
                 guard case .success(let urls) = result else { return }
                 Task {
                     importing = true
                     let r = await LibraryManager.importFiles(urls, into: context)
                     importing = false
-                    message = "Añadidas: \(r.added)" +
-                        (r.skipped > 0 ? " · Omitidas (repetidas o con error): \(r.skipped)" : "")
+                    var parts = ["Añadidas: \(r.added)"]
+                    if r.skipped > 0 { parts.append("Repetidas u omitidas: \(r.skipped)") }
+                    if r.failed > 0 { parts.append("No se pudieron convertir: \(r.failed)") }
+                    message = parts.joined(separator: " · ")
                 }
             }
             .overlay {
