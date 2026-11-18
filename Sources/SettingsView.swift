@@ -6,6 +6,11 @@ struct SettingsView: View {
     @Environment(\.modelContext) private var context
     @Query private var songs: [Song]
     @State private var recalculating = false
+    
+    // Estados para la descarga de música
+    @State private var enlaceYouTube: String = ""
+    @State private var estadoTexto: String = ""
+    @State private var descargando: Bool = false
 
     var body: some View {
         NavigationStack {
@@ -40,6 +45,34 @@ struct SettingsView: View {
                     Text("Biblioteca")
                 } footer: {
                     Text("Vuelve a medir la duración real de cada canción por si alguna aparece con un tiempo distinto.")
+                }
+
+                // NUEVA SECCIÓN DE DESCARGA
+                Section {
+                    TextField("Pega enlace de YouTube...", text: $enlaceYouTube)
+                        .autocapitalization(.none)
+                        .disableAutocorrection(true)
+                    
+                    Button {
+                        descargarAudio(desde: enlaceYouTube)
+                    } label: {
+                        HStack {
+                            Text("Descargar .m4a")
+                            Spacer()
+                            if descargando { ProgressView() }
+                        }
+                    }
+                    .disabled(enlaceYouTube.isEmpty || descargando)
+                    
+                    if !estadoTexto.isEmpty {
+                        Text(estadoTexto)
+                            .font(.footnote)
+                            .foregroundColor(.gray)
+                    }
+                } header: {
+                    Text("Descargar música")
+                } footer: {
+                    Text("Pega el enlace de YouTube para bajar la canción a través de tu servidor.")
                 }
             }
             .navigationTitle("Ajustes")
@@ -83,5 +116,59 @@ struct SettingsView: View {
         } else {
             Toast.shared.show("Duraciones corregidas: \(changed)")
         }
+    }
+
+    // FUNCIÓN DE PETICIÓN AL SERVIDOR DE RENDER (CON TU URL YA CONFIGURADA)
+    private func descargarAudio(desde urlTexto: String) {
+        let servidorUrlString = "https://servidor-musica-thom.onrender.com/download?url=\(urlTexto)"
+        
+        guard let urlCodificada = servidorUrlString.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+              let url = URL(string: urlCodificada) else {
+            estadoTexto = "Enlace no válido"
+            return
+        }
+        
+        descargando = true
+        estadoTexto = "Descargando del servidor..."
+        
+        URLSession.shared.dataTask(with: url) { datos, respuesta, error in
+            DispatchQueue.main.async {
+                descargando = false
+            }
+            
+            if let error = error {
+                DispatchQueue.main.async {
+                    estadoTexto = "Error: \(error.localizedDescription)"
+                }
+                return
+            }
+            
+            guard let httpRespuesta = respuesta as? HTTPURLResponse, httpRespuesta.statusCode == 200,
+                  let datosAudio = datos else {
+                DispatchQueue.main.async {
+                    estadoTexto = "Error en el servidor (¿está dormido?)"
+                }
+                return
+            }
+            
+            do {
+                let directorioTemporal = FileManager.default.temporaryDirectory
+                let nombreArchivo = UUID().uuidString + ".m4a"
+                let rutaDestino = directorioTemporal.appendingPathComponent(nombreArchivo)
+                
+                try datosAudio.write(to: rutaDestino)
+                
+                DispatchQueue.main.async {
+                    estadoTexto = "¡Descargado con éxito!"
+                    enlaceYouTube = ""
+                    Toast.shared.show("Canción bajada al temporal")
+                    print("Guardado en: \(rutaDestino.path)")
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    estadoTexto = "Error al guardar localmente"
+                }
+            }
+        }.resume()
     }
 }
