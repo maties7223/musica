@@ -6,6 +6,9 @@ struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(PlayerManager.self) private var player
 
+    @State private var pendingLink: String?
+    @State private var showLink = false
+
     var body: some View {
         TabView {
             LibraryView()
@@ -26,6 +29,19 @@ struct ContentView: View {
         }
         .onChange(of: scenePhase) { _, phase in
             if phase != .active { player.saveTime() }
+        }
+        .onOpenURL { url in
+            guard url.scheme?.lowercased() == "musica" else { return }
+            let comps = URLComponents(url: url, resolvingAgainstBaseURL: false)
+            if let link = comps?.queryItems?.first(where: { $0.name == "url" })?.value {
+                pendingLink = link
+            } else if let path = comps?.path.trimmed, !path.isEmpty {
+                pendingLink = String(path.drop { $0 == "/" }).removingPercentEncoding
+            }
+            showLink = pendingLink != nil
+        }
+        .sheet(isPresented: $showLink, onDismiss: { pendingLink = nil }) {
+            AddFromLinkSheet(prefill: pendingLink)
         }
     }
 }
