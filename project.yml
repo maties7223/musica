@@ -22,6 +22,12 @@ targets:
         UILaunchScreen: {}
         UIBackgroundModes:
           - audio
+        CFBundleURLTypes:
+          - CFBundleURLName: com.personal.musica
+            CFBundleURLSchemes:
+              - musica
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationLandscapeLeft
