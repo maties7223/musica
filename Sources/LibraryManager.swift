@@ -40,6 +40,7 @@ enum LibraryManager {
         var added = 0
         var skipped = 0
         var failed = 0
+        var songs: [Song] = []
     }
 
     static func clean(_ text: String) -> String {
@@ -47,6 +48,11 @@ enum LibraryManager {
         let result = text.components(separatedBy: bad).joined(separator: "-")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return result.isEmpty ? "Desconocido" : result
+    }
+
+    private static func fold(_ text: String) -> String {
+        text.trimmingCharacters(in: .whitespacesAndNewlines)
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
     }
 
     // MARK: - Metadatos
@@ -116,9 +122,12 @@ enum LibraryManager {
 
     // MARK: - Importar
 
+    /// `override` permite imponer los metadatos (por ejemplo, los de un enlace de Spotify).
     @MainActor
-    static func importFiles(_ urls: [URL], into context: ModelContext) async -> ImportResult {
+    static func importFiles(_ urls: [URL], into context: ModelContext,
+                            override: ((URL) -> Metadata?)? = nil) async -> ImportResult {
         var result = ImportResult()
+        var known = (try? context.fetch(FetchDescriptor<Song>())) ?? []
 
         for url in urls {
             let access = url.startAccessingSecurityScopedResource()
@@ -155,6 +164,20 @@ enum LibraryManager {
                 if let v = t.artist, !v.isEmpty { meta.artist = v }
                 if let v = t.album, !v.isEmpty { meta.album = v }
             }
+            // Los datos del enlace mandan sobre el nombre del archivo descargado.
+            if let forced = override?(url) {
+                if !forced.title.isEmpty { meta.title = forced.title }
+                if !forced.artist.isEmpty { meta.artist = forced.artist }
+                if forced.artwork != nil { meta.artwork = forced.artwork }
+            }
+
+            // Duplicado por título y artista, sin distinguir mayúsculas ni acentos.
+            if known.contains(where: {
+                fold($0.title) == fold(meta.title) && fold($0.artist) == fold(meta.artist)
+            }) {
+                result.skipped += 1
+                continue
+            }
 
             let relativePath = "\(clean(meta.artist))/\(clean(meta.album))/\(clean(finalName))"
             let destination = musicDirectory.appending(path: relativePath)
@@ -173,9 +196,12 @@ enum LibraryManager {
                 continue
             }
 
-            context.insert(Song(title: meta.title, artist: meta.artist, album: meta.album,
-                                duration: meta.duration, relativePath: relativePath,
-                                artworkData: meta.artwork))
+            let song = Song(title: meta.title, artist: meta.artist, album: meta.album,
+                            duration: meta.duration, relativePath: relativePath,
+                            artworkData: meta.artwork)
+            context.insert(song)
+            known.append(song)
+            result.songs.append(song)
             result.added += 1
         }
         try? context.save()
