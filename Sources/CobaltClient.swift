@@ -71,7 +71,7 @@ enum CobaltClient {
         defer { try? FileManager.default.removeItem(at: file.deletingLastPathComponent()) }
 
         onPhase(.importing)
-        var overrideMeta: LibraryManager.Metadata?
+        var forcedMeta: LibraryManager.Metadata?
         if let info {
             var meta = LibraryManager.Metadata(title: info.title)
             if let artist = info.artist, !artist.isEmpty { meta.artist = artist }
@@ -80,9 +80,9 @@ enum CobaltClient {
                let prepared = ImageTools.prepared(data) {
                 meta.artwork = prepared
             }
-            overrideMeta = meta
+            forcedMeta = meta
         }
-        return await LibraryManager.importFiles([file], into: context, override: { _ in overrideMeta })
+        return await LibraryManager.importFiles([file], into: context, forced: { _ in forcedMeta })
     }
 
     // MARK: - Relevo entre instancias
@@ -126,9 +126,9 @@ enum CobaltClient {
         let service = LinkService.detect(link)
 
         // Spotify y enlaces sin audio directo: buscar la canción en YouTube.
-        if service.needsSearch || service == .spotify {
+        if service.needsSearch {
             let query = info?.query ?? link
-            return try await search(instance: instance, query: query, original: link)
+            return try await search(instance: instance, query: query)
         }
 
         var body = audioBody()
@@ -136,7 +136,7 @@ enum CobaltClient {
         return try await perform(instance: instance, body: body)
     }
 
-    private static func search(instance: String, query: String, original: String) async throws -> Resolved {
+    private static func search(instance: String, query: String) async throws -> Resolved {
         var body = audioBody()
         body["url"] = query
         body["youtubeSearch"] = true
@@ -210,22 +210,22 @@ enum CobaltClient {
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
         let data: Data
-        let http: HTTPURLResponse
+        let response: HTTPURLResponse
         do {
-            let (responseData, response) = try await URLSession.shared.data(for: request)
-            guard let cast = response as? HTTPURLResponse else {
+            let (responseData, rawResponse) = try await URLSession.shared.data(for: request)
+            guard let cast = rawResponse as? HTTPURLResponse else {
                 throw CobaltError.retryable("Respuesta inesperada de la instancia.")
             }
             data = responseData
-            http = cast
+            response = cast
         } catch let error as URLError {
             throw CobaltError.retryable(describe(error))
         }
 
-        if http.statusCode == 401 || http.statusCode == 403 {
+        if response.statusCode == 401 || response.statusCode == 403 {
             throw CobaltError.retryable("La instancia pide clave de API o te ha limitado.")
         }
-        if http.statusCode == 429 {
+        if response.statusCode == 429 {
             throw CobaltError.retryable("La instancia está saturada. Probando otra…")
         }
 
@@ -246,7 +246,7 @@ enum CobaltClient {
                 return Resolved(url: url, filename: json["filename"] as? String ?? "audio.mp3")
             }
             if let session = json["session"] as? String {
-                return try await poll(instance: instance, session: session, depth: depth)
+                return try await poll(instance: instance, session: session)
             }
             throw CobaltError.retryable("La instancia no terminó de procesar el audio.")
 
@@ -274,7 +274,7 @@ enum CobaltClient {
     }
 
     /// Cobalt 11 devuelve una sesión que hay que consultar hasta que acaba.
-    private static func poll(instance: String, session: String, depth: Int) async throws -> Resolved {
+    private static func poll(instance: String, session: String) async throws -> Resolved {
         let (base, key) = credentials(for: instance)
         let url = base.appending(path: "session/\(session)")
 
@@ -475,6 +475,10 @@ enum CobaltClient {
             guard let continuation else { return }
             self.continuation = nil
             session.finishTasksAndInvalidate()
+            continuation.resume(with: result)
+        }
+    }
+}
             continuation.resume(with: result)
         }
     }
