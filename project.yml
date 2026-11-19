@@ -12,7 +12,7 @@ targets:
     type: application
     platform: iOS
     sources:
-      - Sources
+      - App
     dependencies:
       - package: SwiftOGG
     info:
@@ -22,12 +22,6 @@ targets:
         UILaunchScreen: {}
         UIBackgroundModes:
           - audio
-        CFBundleURLTypes:
-          - CFBundleURLName: com.personal.musica
-            CFBundleURLSchemes:
-              - musica
-        NSAppTransportSecurity:
-          NSAllowsArbitraryLoads: true
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationLandscapeLeft
@@ -40,6 +34,3 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         MARKETING_VERSION: "1.0"
         CURRENT_PROJECT_VERSION: "1"
-        CODE_SIGNING_ALLOWED: "NO"
-        CODE_SIGNING_REQUIRED: "NO"
-        CODE_SIGN_IDENTITY: ""
