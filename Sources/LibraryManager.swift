@@ -122,10 +122,10 @@ enum LibraryManager {
 
     // MARK: - Importar
 
-    /// `override` permite imponer los metadatos (por ejemplo, los de un enlace de Spotify).
+    /// `forced` permite imponer los metadatos (por ejemplo, los de un enlace de Spotify).
     @MainActor
     static func importFiles(_ urls: [URL], into context: ModelContext,
-                            override: ((URL) -> Metadata?)? = nil) async -> ImportResult {
+                            forced: ((URL) -> Metadata?)? = nil) async -> ImportResult {
         var result = ImportResult()
         var known = (try? context.fetch(FetchDescriptor<Song>())) ?? []
 
@@ -165,10 +165,10 @@ enum LibraryManager {
                 if let v = t.album, !v.isEmpty { meta.album = v }
             }
             // Los datos del enlace mandan sobre el nombre del archivo descargado.
-            if let forced = override?(url) {
-                if !forced.title.isEmpty { meta.title = forced.title }
-                if !forced.artist.isEmpty { meta.artist = forced.artist }
-                if forced.artwork != nil { meta.artwork = forced.artwork }
+            if let forcedMeta = forced?(url) {
+                if !forcedMeta.title.isEmpty { meta.title = forcedMeta.title }
+                if !forcedMeta.artist.isEmpty { meta.artist = forcedMeta.artist }
+                if forcedMeta.artwork != nil { meta.artwork = forcedMeta.artwork }
             }
 
             // Duplicado por título y artista, sin distinguir mayúsculas ni acentos.
