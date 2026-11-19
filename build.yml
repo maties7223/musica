@@ -1,0 +1,70 @@
+name: Build IPA
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: |
+          ls /Applications | grep -i xcode
+          sudo xcode-select -s /Applications/Xcode_16.2.app || sudo xcode-select -s /Applications/Xcode.app
+          xcodebuild -version
+
+      - name: Ensure AppIcon exists
+        run: |
+          mkdir -p Sources/Assets.xcassets/AppIcon.appiconset
+          if [ ! -f Sources/Assets.xcassets/Contents.json ]; then
+            echo '{"info":{"version":1,"author":"xcode"}}' > Sources/Assets.xcassets/Contents.json
+          fi
+          if [ ! -f Sources/Assets.xcassets/AppIcon.appiconset/Contents.json ]; then
+            echo '{"images":[{"idiom":"universal","platform":"ios","size":"1024x1024"}],"info":{"version":1,"author":"xcode"}}' > Sources/Assets.xcassets/AppIcon.appiconset/Contents.json
+          fi
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate project
+        run: xcodegen generate
+
+      - name: Resolve packages
+        run: xcodebuild -resolvePackageDependencies -project Musica.xcodeproj -scheme Musica
+
+      - name: Build
+        run: |
+          set -o pipefail
+          xcodebuild archive \
+            -project Musica.xcodeproj \
+            -scheme Musica \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath build/Musica.xcarchive \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            2>&1 | tee build.log
+
+      - name: Show errors
+        if: failure()
+        run: grep -E "error:" build.log | sort -u || true
+
+      - name: Package IPA
+        run: |
+          mkdir -p Payload
+          cp -R build/Musica.xcarchive/Products/Applications/Musica.app Payload/
+          zip -r Musica.ipa Payload
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Musica-ipa
+          path: Musica.ipa
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: build-log
+          path: build.log
