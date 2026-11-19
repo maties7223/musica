@@ -145,6 +145,7 @@ struct AddFromLinkSheet: View {
         }
     }
 
+    @MainActor
     private func start() {
         let list = links
         guard !list.isEmpty else { return }
@@ -184,21 +185,19 @@ struct AddFromLinkSheet: View {
                 }
             }
 
-            await MainActor.run {
-                working = false
-                progress = 0
-                var parts: [String] = []
-                if !added.isEmpty { parts.append("Añadidas: \(added.count)") }
-                if skipped > 0 { parts.append("Ya estaban: \(skipped)") }
-                if failed > 0 { parts.append("Con error: \(failed)") }
-                errorText = parts.isEmpty ? "No se pudo descargar nada." : nil
-                if !parts.isEmpty {
-                    Toast.shared.show(parts.joined(separator: " · "),
-                                      icon: added.isEmpty ? "exclamationmark.circle.fill" : "checkmark.circle.fill")
-                }
-                if added.isEmpty, let firstError { errorText = firstError }
-                if !added.isEmpty && autoPlay { play(added) }
+            working = false
+            progress = 0
+            var parts: [String] = []
+            if !added.isEmpty { parts.append("Añadidas: \(added.count)") }
+            if skipped > 0 { parts.append("Ya estaban: \(skipped)") }
+            if failed > 0 { parts.append("Con error: \(failed)") }
+            errorText = parts.isEmpty ? "No se pudo descargar nada." : nil
+            if !parts.isEmpty {
+                Toast.shared.show(parts.joined(separator: " · "),
+                                  icon: added.isEmpty ? "exclamationmark.circle.fill" : "checkmark.circle.fill")
             }
+            if added.isEmpty, let firstError { errorText = firstError }
+            if !added.isEmpty && autoPlay { play(added) }
         }
     }
 
